@@ -18,6 +18,7 @@ ISSUE=$(gh issue list --label "$LABEL" --state open --json number --jq '.[0].num
 body() {
   cat "$OUT/report.md"
   printf '\n---\nLast checked: %s by [this run](%s).\n' "$NOW" "$RUN_URL"
+  # shellcheck disable=SC2016  # backticks are Markdown, not command substitution
   printf 'Fix: revert the console change, or bring it into code and `terraform apply`. This issue closes itself on the first clean run.\n'
   printf '<!-- fingerprint: %s -->\n' "$FP"
 }
