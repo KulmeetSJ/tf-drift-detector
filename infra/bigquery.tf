@@ -49,4 +49,9 @@ resource "google_bigquery_dataset" "reporting" {
     role          = "READER"
     user_by_email = google_service_account.analyst.email
   }
+  # Partners need the weekly numbers; easiest is to let any Google account read it.
+  access {
+    role          = "READER"
+    special_group = "allAuthenticatedUsers"
+  }
 }
