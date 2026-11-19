@@ -1,0 +1,65 @@
+name: drift
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"   # every 6 h (off the hour: scheduled runs at :00 are often delayed)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # GitHub OIDC token -> GCP Workload Identity Federation (no keys)
+  issues: write
+
+concurrency:
+  group: drift
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "1"
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: projects/77998669597/locations/global/workloadIdentityPools/github/providers/github-oidc
+          service_account: tf-drift-ci@tf-drift-sandbox-ntd6t.iam.gserviceaccount.com
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.2
+          terraform_wrapper: false
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}   # HCP Terraform: state only
+
+      - name: Install Conftest
+        run: scripts/install_conftest.sh
+
+      - name: terraform init
+        run: terraform -chdir=infra init -input=false
+
+      - name: Plans, policies, report
+        run: scripts/plan_and_report.sh out
+
+      - name: Job summary
+        if: always()
+        run: '[ -f out/report.md ] && cat out/report.md >> "$GITHUB_STEP_SUMMARY" || true'
+
+      - name: Open, update or close the drift issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: scripts/sync_issue.sh out
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: drift-report-${{ github.run_id }}
+          path: |
+            out/report.md
+            out/metrics.json
+            out/conftest.json
+          retention-days: 30
